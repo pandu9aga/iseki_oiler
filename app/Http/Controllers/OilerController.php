@@ -187,22 +187,91 @@ class OilerController extends Controller
 
     public function handleNodeMCUStatus(Request $request)
     {
-        // Cari record-record yang Detect_Time_Record nya NULL, diurutkan berdasarkan Scan_Time_Record tertua dulu
-        // first() akan mengambil record dengan Scan_Time_Record tertua (paling lama)
+        // 1. Cari record di database OILER yang Detect_Time_Record nya NULL, diurutkan berdasarkan Scan_Time_Record tertua dulu
         $recordToUpdate = Record::whereNull('Detect_Time_Record')
                             ->orderBy('Scan_Time_Record', 'asc') // 'asc' untuk tertua dulu
                             ->first();
 
         if ($recordToUpdate) {
-            // Update Detect_Time_Record dengan timestamp sekarang
-            $recordToUpdate->Detect_Time_Record = Carbon::now();
+            // Ambil Sequence_No_Record dari record yang ditemukan
+            $sequenceNoToUpdate = $recordToUpdate->Sequence_No_Record; // Misal: "06731"
+
+            // 2. Persiapkan timestamp untuk proses "oiler"
+            $oilerTimestamp = Carbon::now()->format('Y-m-d H:i:s'); // Format timestamp
+
+            // 3. Ambil data plan dari database PODIUM berdasarkan Sequence_No_Plan
+            // Format sequence_no ke 5 digit (jika perlu, sesuaikan dengan format di podium, contoh: "6731" -> "06731")
+            // Kita asumsikan $sequenceNoToUpdate dari record oiler sudah diformat dengan benar (misalnya "06731")
+            $formattedSequenceNo = str_pad($sequenceNoToUpdate, 5, '0', STR_PAD_LEFT); // Contoh: "6731" -> "06731"
+
+            $plan = DB::connection('podium')->table('plans')->where('Sequence_No_Plan', $formattedSequenceNo)->first();
+
+            if (!$plan) {
+                // Jika plan tidak ditemukan di podium untuk sequence ini, log atau tangani error
+                //\Log::warning("Plan tidak ditemukan di PODIUM untuk Sequence_No_Plan: " . $formattedSequenceNo . " saat NodeMCU mengirim status.");
+                // Kita tetap update record di oiler, tapi tandai bahwa podium tidak diperbarui
+                $recordToUpdate->Detect_Time_Record = $oilerTimestamp;
+                $recordToUpdate->save();
+
+                return response()->json([
+                    'success' => true, // Dianggap sukses di sisi oiler
+                    'message' => 'Detect time updated locally for sequence: ' . $sequenceNoToUpdate . ', but plan not found in PODIUM.',
+                    'updated_record' => $recordToUpdate
+                ], 200);
+            }
+
+            // 4. Ambil Record_Plan saat ini dari plan (ini string JSON)
+            $currentRecordPlanJson = $plan->Record_Plan; // Misal: {"parcom_ring_synchronizer":"2025-10-31 14:04:04", ...}
+
+            // 5. Decode JSON menjadi array PHP
+            $currentRecordPlanArray = null;
+            if (is_string($currentRecordPlanJson) && !empty($currentRecordPlanJson)) {
+                $decoded = json_decode($currentRecordPlanJson, true); // true untuk array asosiatif
+                if (is_array($decoded)) {
+                    $currentRecordPlanArray = $decoded;
+                } else {
+                    // Jika decode gagal atau hasilnya bukan array, log error dan hentikan update podium
+                    // \Log::error("Record_Plan untuk Id_Plan {$plan->Id_Plan} bukan string JSON valid saat update NodeMCU.", [
+                    //     'raw_value' => $currentRecordPlanJson,
+                    //     'decoded_value' => $decoded,
+                    //     'decoded_type' => gettype($decoded)
+                    // ]);
+                    // Kita tetap update record di oiler, tapi tandai bahwa podium tidak diperbarui karena error parsing
+                    $recordToUpdate->Detect_Time_Record = $oilerTimestamp;
+                    $recordToUpdate->save();
+
+                    return response()->json([
+                        'success' => true, // Dianggap sukses di sisi oiler
+                        'message' => 'Detect time updated locally for sequence: ' . $sequenceNoToUpdate . ', but Record_Plan in PODIUM was invalid JSON.',
+                        'updated_record' => $recordToUpdate
+                    ], 200);
+                }
+            } else {
+                // Jika Record_Plan kosong/null, inisialisasi sebagai array kosong
+                $currentRecordPlanArray = [];
+            }
+
+            // 6. Tambahkan atau update proses "oiler" di array
+            $processName = 'oiler'; // Nama proses sesuai rule
+            $currentRecordPlanArray[$processName] = $oilerTimestamp; // Misal: ["oiler" => "2025-11-04 10:00:00"]
+
+            // 7. Encode array kembali menjadi string JSON
+            $updatedRecordPlanJson = json_encode($currentRecordPlanArray, JSON_UNESCAPED_UNICODE);
+
+            // 8. Update Record_Plan di database PODIUM
+            DB::connection('podium')->table('plans')
+                ->where('Id_Plan', $plan->Id_Plan) // Gunakan Id_Plan untuk update yang akurat
+                ->update(['Record_Plan' => $updatedRecordPlanJson]);
+
+            // 9. Update Detect_Time_Record di database OILER
+            $recordToUpdate->Detect_Time_Record = $oilerTimestamp;
             $recordToUpdate->save(); // Simpan perubahan
 
-            // Kembalikan response sukses ke NodeMCU
+            // 10. Kembalikan response sukses ke NodeMCU
             return response()->json([
                 'success' => true,
-                'message' => 'Detect time updated successfully for sequence: ' . $recordToUpdate->Sequence_No_Record . ' (Scanned at: ' . $recordToUpdate->Scan_Time_Record . ')',
-                'updated_record' => $recordToUpdate // Opsional: kirim data record yang diupdate
+                'message' => 'Detect time updated successfully for sequence: ' . $sequenceNoToUpdate . ' (Scanned at: ' . $recordToUpdate->Scan_Time_Record . ') and PODIUM Record_Plan updated.',
+                'updated_record' => $recordToUpdate
             ], 200);
         } else {
             // Jika tidak ada record yang belum terdeteksi (Detect_Time_Record != NULL semua)
