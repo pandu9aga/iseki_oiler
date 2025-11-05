@@ -21,7 +21,8 @@
 @section('scripts')
 <script>
     $(document).ready(function() {
-        $('#recordsTable').DataTable({
+        // Inisialisasi DataTable
+        var table = $('#recordsTable').DataTable({
             processing: true,
             serverSide: true,
             pageLength: 50,
@@ -74,6 +75,14 @@
                 // Tambahkan kolom lain jika ada
             ]
         });
+
+        // --- LOGIKA AUTO-REFRESH ---
+        // Set interval untuk reload data setiap 5 detik (5000 milidetik)
+        setInterval(function() {
+            // console.log("Refreshing DataTable..."); // Optional: Logging untuk debugging
+            table.ajax.reload(null, false); // null untuk callback (tidak ada), false untuk tidak mereset paging (tetap di halaman saat ini)
+        }, 10000); // 5000 milidetik = 5 detik
+
     });
 </script>
 @endsection

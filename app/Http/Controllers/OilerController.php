@@ -49,27 +49,31 @@ class OilerController extends Controller
         }
 
         $sequenceNo = $request->input('sequence_no');
-        $processName = 'oiler';
 
         // Format sequence_no ke 5 digit (jika perlu, sesuaikan dengan format di podium)
         $formattedSequenceNo = str_pad($sequenceNo, 5, '0', STR_PAD_LEFT);
 
-        // --- LOGIKA VALIDASI (digabung dari validateSequence) ---
-        // Cek di tabel records apakah ada entry dengan Detect_Time_Record NULL untuk sequence_no ini
-        $existingIncompleteRecord = DB::table('records')
-            ->where('Sequence_No_Record', $formattedSequenceNo)
+        // --- LOGIKA VALIDASI AWAL DI SISTEM OILER ---
+        // Cek di tabel records apakah ada entry dengan Detect_Time_Record NULL
+        $incompleteRecord = DB::table('records')
+            ->select('Sequence_No_Record') // Ambil kolom Sequence_No_Record
             ->whereNull('Detect_Time_Record')
-            ->exists();
+            ->first(); // Ambil satu record saja
 
-        if ($existingIncompleteRecord) {
+        if ($incompleteRecord) {
+            $incompleteSequenceNo = $incompleteRecord->Sequence_No_Record;
             return response()->json([
                 'success' => false,
-                'message' => "Nomor scan {$formattedSequenceNo} sebelumnya belum mendeteksi oli."
-            ], 400);
+                'message' => "Nomor scan {$incompleteSequenceNo} sebelumnya belum mendeteksi oli."
+            ], 400); // Gunakan 400 Bad Request untuk error validasi
         }
 
+        // --- LOGIKA VALIDASI TERHADAP SISTEM PODIUM ---
+        $processName = 'oiler'; // Nama proses oiler
+        $timestamp = Carbon::now()->format('Y-m-d H:i:s'); // Timestamp saat proses ini dicatat (jika perlu)
+
         try {
-            // 1. Cari plan di database PODIUM
+            // 1. Cari plan di database PODIUM berdasarkan Sequence_No_Plan
             $plan = DB::connection('podium')->table('plans')->where('Sequence_No_Plan', $formattedSequenceNo)->first();
             if (!$plan) {
                 return response()->json([
@@ -80,7 +84,7 @@ class OilerController extends Controller
 
             $modelName = $plan->Model_Name_Plan;
 
-            // 2. Cari rule di database PODIUM
+            // 2. Cari rule di database PODIUM berdasarkan Type_Rule
             $rule = DB::connection('podium')->table('rules')->where('Type_Rule', $modelName)->first();
             if (!$rule) {
                 return response()->json([
@@ -89,7 +93,7 @@ class OilerController extends Controller
                 ], 400);
             }
 
-            // 3. Ambil Rule_Rule (string JSON dari Query Builder)
+            // 3. Ambil Rule_Rule (ini berupa string JSON dari Query Builder)
             $ruleSequenceRaw = $rule->Rule_Rule;
 
             // Coba decode string JSON menjadi array
@@ -100,53 +104,68 @@ class OilerController extends Controller
 
             // Pastikan $ruleSequence adalah array hasil decode JSON.
             if (!is_array($ruleSequence)) {
+                // Jika decode gagal atau nilainya bukan string JSON valid, kembalikan error
+                Log::error("Rule_Rule untuk model '{$modelName}' bukan string JSON valid.", [
+                    'raw_value' => $ruleSequenceRaw,
+                    'decoded_value' => $ruleSequence,
+                    'decoded_type' => gettype($ruleSequence)
+                ]);
                 return response()->json([
                     'success' => false,
                     'message' => "Format rule untuk model '{$modelName}' rusak atau tidak valid."
                 ], 400);
             }
 
-            // 4. Cek apakah process_name (oiler) ada dalam rule
+            // 4. Cek apakah process_name ('oiler') ada dalam rule
             $position = null;
+            $found = false;
             foreach ($ruleSequence as $key => $process) {
                 if ($process === $processName) {
                     $position = (int)$key;
+                    $found = true;
                     break;
                 }
             }
 
-            if ($position === null) {
+            if (!$found) {
                 return response()->json([
                     'success' => false,
                     'message' => "Proses Oiler tidak termasuk dalam rule untuk model '{$modelName}'."
                 ], 400);
             }
 
-            // 5. Ambil Record_Plan (string JSON dari Query Builder)
-            $recordRaw = $plan->Record_Plan;
+            // 5. Ambil Record_Plan (ini berupa string JSON dari Query Builder)
+            $recordPlanRaw = $plan->Record_Plan;
 
             // Coba decode string JSON menjadi array
-            $record = [];
-            if (is_string($recordRaw) && !empty($recordRaw)) {
-                $decodedRecord = json_decode($recordRaw, true);
+            $recordPlan = [];
+            if (is_string($recordPlanRaw) && !empty($recordPlanRaw)) {
+                $decodedRecord = json_decode($recordPlanRaw, true);
                 if (is_array($decodedRecord)) {
-                    $record = $decodedRecord;
+                    $recordPlan = $decodedRecord;
                 } else {
+                    // Jika decode gagal atau nilainya bukan string JSON valid, kembalikan error
+                    Log::error("Record_Plan untuk Id_Plan {$plan->Id_Plan} bukan string JSON valid.", [
+                        'raw_value' => $recordPlanRaw,
+                        'decoded_value' => $decodedRecord,
+                        'decoded_type' => gettype($decodedRecord)
+                    ]);
                     return response()->json([
                         'success' => false,
                         'message' => "Format Record_Plan untuk plan ini rusak."
                     ], 500); // atau 400
                 }
-            } // Jika null atau kosong, biarkan $record sebagai array kosong
+            } // Jika null atau kosong, biarkan $recordPlan sebagai array kosong
 
-            // 6. Cek apakah proses sebelumnya sudah dilakukan
+            // 6. Cek apakah proses sebelumnya sudah dilakukan sesuai urutan rule
             $previousProcessesDone = true;
             $missingPrevious = [];
+            // Loop dari 1 hingga posisi proses 'oiler' - 1
             for ($i = 1; $i < $position; $i++) {
-                $prevProcess = $ruleSequence[$i] ?? null;
-                if ($prevProcess && !isset($record[$prevProcess])) {
+                $prevProcessName = $ruleSequence[(string)$i] ?? null; // Gunakan (string)$i karena key JSON adalah string
+                if ($prevProcessName !== null && !isset($recordPlan[$prevProcessName])) {
                     $previousProcessesDone = false;
-                    $missingPrevious[] = $prevProcess;
+                    $missingPrevious[] = $prevProcessName;
                 }
             }
 
@@ -157,30 +176,36 @@ class OilerController extends Controller
                 ], 400);
             }
 
-            // --- LOGIKA PENYIMPANAN (jika validasi sukses) ---
+            // --- LOGIKA PENYIMPANAN KE DATABASE OILER (Jika semua validasi lolos) ---
             $scanTime = Carbon::now();
-            $detectTime = null; // Selalu null sesuai permintaan
+            // $detectTime = null; // Kita tetap gunakan null seperti sebelumnya
 
             $recordData = [
-                'Sequence_No_Record' => $formattedSequenceNo, // Gunakan yang sudah diformat
+                'Sequence_No_Record' => $formattedSequenceNo,
                 'Scan_Time_Record' => $scanTime,
-                'Detect_Time_Record' => $detectTime,
-                // 'Photo_Path' => null, // Tidak disimpan karena tidak ada foto
+                'Detect_Time_Record' => null, // Selalu null saat insert awal
+                // 'Photo_Path' bisa ditambahkan jika nanti fitur upload foto ditambahkan
             ];
 
-            // Simpan ke database records (oiler_db)
-            Record::create($recordData);
+            // Simpan ke tabel records di database sistem Oiler
+            $newRecord = Record::create($recordData);
 
             // Kembalikan respons sukses
             return response()->json([
                 'success' => true,
-                'message' => "Proses Oiler untuk sequence {$formattedSequenceNo} berhasil dicatat."
+                'message' => "Proses Oiler untuk sequence {$formattedSequenceNo} berhasil dicatat.",
+                'data' => $newRecord // Opsional: kembalikan data record yang baru dibuat
             ]);
 
         } catch (\Exception $e) {
+            // Tangani exception umum selama proses validasi dan penyimpanan ke PODIUM/OILER
+            Log::error('Gagal memproses di sistem Oiler atau PODIUM: ' . $e->getMessage(), [
+                'sequence_no' => $sequenceNo,
+                'exception' => $e
+            ]);
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal memproses di sistem PODIUM: ' . $e->getMessage()
+                'message' => 'Gagal memproses di sistem Oiler atau PODIUM: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -224,7 +249,7 @@ class OilerController extends Controller
             $currentRecordPlanJson = $plan->Record_Plan; // Misal: {"parcom_ring_synchronizer":"2025-10-31 14:04:04", ...}
 
             // 5. Decode JSON menjadi array PHP
-            $currentRecordPlanArray = null;
+            $currentRecordPlanArray = [];
             if (is_string($currentRecordPlanJson) && !empty($currentRecordPlanJson)) {
                 $decoded = json_decode($currentRecordPlanJson, true); // true untuk array asosiatif
                 if (is_array($decoded)) {
@@ -246,14 +271,47 @@ class OilerController extends Controller
                         'updated_record' => $recordToUpdate
                     ], 200);
                 }
-            } else {
-                // Jika Record_Plan kosong/null, inisialisasi sebagai array kosong
-                $currentRecordPlanArray = [];
-            }
+            } // Jika null atau kosong, biarkan $currentRecordPlanArray sebagai array kosong
 
             // 6. Tambahkan atau update proses "oiler" di array
             $processName = 'oiler'; // Nama proses sesuai rule
             $currentRecordPlanArray[$processName] = $oilerTimestamp; // Misal: ["oiler" => "2025-11-04 10:00:00"]
+
+            // --- LOGIKA TAMBAHAN: Cek apakah SEMUA proses dalam rule untuk model ini sekarang sudah selesai ---
+            $allProcessesCompleted = true;
+            $processesMissing = []; // Untuk logging/debugging jika perlu
+
+            // Ambil rule berdasarkan Model_Name_Plan dari plan
+            $modelName = $plan->Model_Name_Plan;
+            $rule = DB::connection('podium')->table('rules')->where('Type_Rule', $modelName)->first();
+
+            if ($rule) {
+                $ruleSequenceRaw = $rule->Rule_Rule;
+                $ruleSequence = null;
+                if (is_string($ruleSequenceRaw)) {
+                    $ruleSequence = json_decode($ruleSequenceRaw, true);
+                }
+
+                if (is_array($ruleSequence)) {
+                    // Iterasi setiap proses yang DIDEFINISIKAN dalam rule
+                    foreach ($ruleSequence as $expectedProcessName) {
+                        // Cek apakah proses yang DIDEFINISIKAN ada di Record_Plan
+                        if (!isset($currentRecordPlanArray[$expectedProcessName])) {
+                            $allProcessesCompleted = false;
+                            $processesMissing[] = $expectedProcessName; // Tambahkan ke daftar yang belum selesai
+                            // Tidak perlu break, kita ingin tahu semua yang belum selesai jika perlu log
+                        }
+                    }
+                } else {
+                    // Jika rule tidak valid, kita asumsikan statusnya tidak bisa ditentukan sebagai 'done'
+                    $allProcessesCompleted = false;
+                    // Log opsional: \Log::warning("Rule untuk model {$modelName} tidak valid saat update NodeMCU.", ['raw_rule' => $ruleSequenceRaw]);
+                }
+            } else {
+                // Jika rule tidak ditemukan, kita asumsikan statusnya tidak bisa ditentukan sebagai 'done'
+                $allProcessesCompleted = false;
+                // Log opsional: \Log::warning("Rule tidak ditemukan untuk model {$modelName} saat update NodeMCU.");
+            }
 
             // 7. Encode array kembali menjadi string JSON
             $updatedRecordPlanJson = json_encode($currentRecordPlanArray, JSON_UNESCAPED_UNICODE);
@@ -263,14 +321,28 @@ class OilerController extends Controller
                 ->where('Id_Plan', $plan->Id_Plan) // Gunakan Id_Plan untuk update yang akurat
                 ->update(['Record_Plan' => $updatedRecordPlanJson]);
 
+            // --- LOGIKA UPDATE STATUS PLAN BERDASARKAN CEK ---
+            if ($allProcessesCompleted) {
+                // Update Status_Plan ke 'done'
+                DB::connection('podium')->table('plans')
+                    ->where('Id_Plan', $plan->Id_Plan)
+                    ->update(['Status_Plan' => 'done']);
+
+                // Log opsional: \Log::info("Status_Plan diupdate menjadi 'done' untuk Id_Plan: {$plan->Id_Plan} karena semua proses selesai setelah menambahkan 'oiler'.");
+            } else {
+                // Opsional: Log proses yang masih belum selesai
+                // \Log::debug("Status_Plan tidak diupdate untuk Id_Plan: {$plan->Id_Plan}. Proses yang belum selesai: " . implode(', ', $processesMissing));
+            }
+
             // 9. Update Detect_Time_Record di database OILER
             $recordToUpdate->Detect_Time_Record = $oilerTimestamp;
             $recordToUpdate->save(); // Simpan perubahan
 
             // 10. Kembalikan response sukses ke NodeMCU
+            $statusMessage = $allProcessesCompleted ? " dan Status Plan: Done." : " dan Status Plan: Pending (masih ada proses yang belum selesai).";
             return response()->json([
                 'success' => true,
-                'message' => 'Detect time updated successfully for sequence: ' . $sequenceNoToUpdate . ' (Scanned at: ' . $recordToUpdate->Scan_Time_Record . ') and PODIUM Record_Plan updated.',
+                'message' => 'Detect time updated successfully for sequence: ' . $sequenceNoToUpdate . ' (Scanned at: ' . $recordToUpdate->Scan_Time_Record . ')' . $statusMessage,
                 'updated_record' => $recordToUpdate
             ], 200);
         } else {
