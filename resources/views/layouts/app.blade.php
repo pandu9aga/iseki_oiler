@@ -11,11 +11,15 @@
         .text-primary {
             color: #d63384 !important;
         }
+
+        .bg-pink {
+            background-color: #d63384 !important;
+        }
     </style>
     @yield('style')
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-pink">
         <div class="container">
             <a class="navbar-brand" href="{{ route('home') }}">Iseki Oiler</a>
             <div class="navbar-nav">
