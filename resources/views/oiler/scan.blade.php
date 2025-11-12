@@ -4,7 +4,7 @@
 <h2 class="text-primary">Scan Unit Oiler</h2>
 <hr>
 
-<div class="row">
+<div class="row mx-4">
     <div class="col-md-6">
         <div class="mb-3">
             <label for="sequence_no" class="form-label">Sequence Number</label>

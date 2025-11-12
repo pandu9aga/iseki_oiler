@@ -20,7 +20,7 @@
 </head>
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-pink">
-        <div class="container">
+        <div class="container mx-4">
             <a class="navbar-brand" href="{{ route('home') }}">Iseki Oiler</a>
             <div class="navbar-nav">
                 <a class="nav-link" href="{{ route('oiler.scan') }}">Scan</a>
