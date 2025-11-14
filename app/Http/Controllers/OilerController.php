@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Record;
+use App\Models\Notification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -351,6 +352,60 @@ class OilerController extends Controller
                 'success' => false,
                 'message' => 'No pending records found to update Detect_Time_Record.'
             ], 200); // Gunakan 200 OK, bukan 404, karena bukan error di sisi NodeMCU
+        }
+    }
+
+    // Method untuk cek Detect_Time_Record
+    public function checkDetectTime($sequenceNo)
+    {
+        // Format sequence_no ke 5 digit
+        $formattedSequenceNo = str_pad($sequenceNo, 5, '0', STR_PAD_LEFT);
+
+        // Cari record berdasarkan Sequence_No_Record
+        $record = Record::where('Sequence_No_Record', $formattedSequenceNo)->first();
+
+        if ($record) {
+            if ($record->Detect_Time_Record) {
+                // Jika Detect_Time_Record tidak null, kirimkan nilainya
+                return response()->json([
+                    'success' => true,
+                    'detect_time' => $record->Detect_Time_Record // Format sesuai kebutuhan frontend
+                ]);
+            } else {
+                // Jika Detect_Time_Record masih null
+                return response()->json([
+                    'success' => true,
+                    'detect_time' => null
+                ]);
+            }
+        } else {
+            // Jika record tidak ditemukan
+            return response()->json([
+                'success' => false,
+                'message' => 'Record tidak ditemukan.'
+            ], 404);
+        }
+    }
+
+    // Method untuk hapus record berdasarkan Sequence_No_Record
+    public function deleteRecord($sequenceNo)
+    {
+        // Format sequence_no ke 5 digit
+        $formattedSequenceNo = str_pad($sequenceNo, 5, '0', STR_PAD_LEFT);
+
+        // Cari record dan hapus
+        $deletedRows = Record::where('Sequence_No_Record', $formattedSequenceNo)->delete();
+
+        if ($deletedRows > 0) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Record berhasil dihapus.'
+            ]);
+        } else {
+            return response()->json([
+                'success' => false,
+                'message' => 'Record tidak ditemukan atau gagal dihapus.'
+            ], 404);
         }
     }
 
