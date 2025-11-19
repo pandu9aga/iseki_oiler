@@ -53,12 +53,17 @@
 <!-- Modal Besar untuk Notifikasi "Oli Terdeteksi" -->
 <div class="modal fade" id="oilDetectedModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
     <div class="modal-dialog modal-dialog-centered modal-fullscreen">
-        <div class="modal-content bg-dark text-white">
+        <div class="modal-content bg-white">
             <div class="modal-body d-flex align-items-center justify-content-center">
                 <div class="text-center">
-                    <h1 class="text-warning">Oli Terdeteksi</h1>
+                    <h1 class="text-primary">Oli Terdeteksi</h1>
                     <p class="fs-4">Proses oli berhasil tercatat.</p>
-                    <button type="button" class="btn btn-lg btn-outline-light" data-bs-dismiss="modal">OK</button>
+                    <button type="button" 
+                            class="btn btn-success" 
+                            style="padding: 50px 80px; font-size: 3rem; border-radius: 20px;" 
+                            data-bs-dismiss="modal">
+                        OK
+                    </button>
                 </div>
             </div>
         </div>
@@ -92,6 +97,8 @@
     let pollInterval;
     let countdownInterval;
     let countdownTime = 40; // Detik
+
+    // oilDetectedModal.show();
 
     document.getElementById('scanButton').addEventListener('click', function () {
         if (html5QrcodeScanner) {
