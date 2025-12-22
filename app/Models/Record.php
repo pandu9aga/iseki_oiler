@@ -12,6 +12,7 @@ class Record extends Model
 
     protected $fillable = [
         'Sequence_No_Record',
+        'Production_Date_Record',
         'Scan_Time_Record',
         'Detect_Time_Record'
     ];

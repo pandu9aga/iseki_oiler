@@ -40,6 +40,7 @@ class OilerController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'sequence_no' => 'required|string',
+            'production_date' => 'required'
         ]);
 
         if ($validator->fails()) {
@@ -53,6 +54,7 @@ class OilerController extends Controller
 
         // Format sequence_no ke 5 digit (jika perlu, sesuaikan dengan format di podium)
         $formattedSequenceNo = str_pad($sequenceNo, 5, '0', STR_PAD_LEFT);
+        $productionDate = $request->input('production_date');
 
         // --- LOGIKA VALIDASI AWAL DI SISTEM OILER ---
         // Cek di tabel records apakah ada entry dengan Detect_Time_Record NULL
@@ -75,7 +77,11 @@ class OilerController extends Controller
 
         try {
             // 1. Cari plan di database PODIUM berdasarkan Sequence_No_Plan
-            $plan = DB::connection('podium')->table('plans')->where('Sequence_No_Plan', $formattedSequenceNo)->first();
+            $plan = DB::connection('podium')
+                        ->table('plans')
+                        ->where('Sequence_No_Plan', $formattedSequenceNo)
+                        ->where('Production_Date_Plan', $productionDate)
+                        ->first();
             if (!$plan) {
                 return response()->json([
                     'success' => false,
@@ -183,6 +189,7 @@ class OilerController extends Controller
 
             $recordData = [
                 'Sequence_No_Record' => $formattedSequenceNo,
+                'Production_Date_Record' => $productionDate,
                 'Scan_Time_Record' => $scanTime,
                 'Detect_Time_Record' => null, // Selalu null saat insert awal
                 // 'Photo_Path' bisa ditambahkan jika nanti fitur upload foto ditambahkan
@@ -221,6 +228,7 @@ class OilerController extends Controller
         if ($recordToUpdate) {
             // Ambil Sequence_No_Record dari record yang ditemukan
             $sequenceNoToUpdate = $recordToUpdate->Sequence_No_Record; // Misal: "06731"
+            $productionDate = $recordToUpdate->Production_Date_Record;
 
             // 2. Persiapkan timestamp untuk proses "oiler"
             $oilerTimestamp = Carbon::now()->format('Y-m-d H:i:s'); // Format timestamp
@@ -230,7 +238,11 @@ class OilerController extends Controller
             // Kita asumsikan $sequenceNoToUpdate dari record oiler sudah diformat dengan benar (misalnya "06731")
             $formattedSequenceNo = str_pad($sequenceNoToUpdate, 5, '0', STR_PAD_LEFT); // Contoh: "6731" -> "06731"
 
-            $plan = DB::connection('podium')->table('plans')->where('Sequence_No_Plan', $formattedSequenceNo)->first();
+            $plan = DB::connection('podium')
+                            ->table('plans')
+                            ->where('Sequence_No_Plan', $formattedSequenceNo)
+                            ->where('Production_Date_Plan', $productionDate)
+                            ->first();
 
             if (!$plan) {
                 // Jika plan tidak ditemukan di podium untuk sequence ini, log atau tangani error
@@ -356,13 +368,15 @@ class OilerController extends Controller
     }
 
     // Method untuk cek Detect_Time_Record
-    public function checkDetectTime($sequenceNo)
+    public function checkDetectTime($sequenceNo, $productionDate)
     {
         // Format sequence_no ke 5 digit
         $formattedSequenceNo = str_pad($sequenceNo, 5, '0', STR_PAD_LEFT);
 
         // Cari record berdasarkan Sequence_No_Record
-        $record = Record::where('Sequence_No_Record', $formattedSequenceNo)->first();
+        $record = Record::where('Sequence_No_Record', $formattedSequenceNo)
+                            ->where('Production_Date_Record', $productionDate)
+                            ->first();
 
         if ($record) {
             if ($record->Detect_Time_Record) {
@@ -388,13 +402,15 @@ class OilerController extends Controller
     }
 
     // Method untuk hapus record berdasarkan Sequence_No_Record
-    public function deleteRecord($sequenceNo)
+    public function deleteRecord($sequenceNo, $productionDate)
     {
         // Format sequence_no ke 5 digit
         $formattedSequenceNo = str_pad($sequenceNo, 5, '0', STR_PAD_LEFT);
 
         // Cari record dan hapus
-        $deletedRows = Record::where('Sequence_No_Record', $formattedSequenceNo)->delete();
+        $deletedRows = Record::where('Sequence_No_Record', $formattedSequenceNo)
+                                ->where('Production_Date_Record', $productionDate)
+                                ->delete();
 
         if ($deletedRows > 0) {
             return response()->json([

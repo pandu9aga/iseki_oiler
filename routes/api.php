@@ -8,6 +8,6 @@ Route::get('/records', [OilerController::class, 'getRecords'])->name('oiler.reco
 Route::post('/nodemcu/status', [OilerController::class, 'handleNodeMCUStatus'])->name('oiler.nodemcu.status');
 
 // Route untuk cek Detect_Time_Record berdasarkan Sequence_No_Record
-Route::get('/check-detect-time/{sequence_no}', [OilerController::class, 'checkDetectTime'])->name('api.oiler.check_detect_time');
+Route::get('/check-detect-time/{sequence_no}/{productionDate}', [OilerController::class, 'checkDetectTime'])->name('api.oiler.check_detect_time');
 // Route untuk hapus record berdasarkan Sequence_No_Record
-Route::delete('/delete-record/{sequence_no}', [OilerController::class, 'deleteRecord'])->name('api.oiler.delete_record');
+Route::delete('/delete-record/{sequence_no}/{productionDate}', [OilerController::class, 'deleteRecord'])->name('api.oiler.delete_record');

@@ -35,6 +35,9 @@
                 Sequence No: <span id="detailSequenceNo"></span>
             </div>
             <div class="mb-2">
+                Production Date: <span id="detailProductionDate"></span>
+            </div>
+            <div class="mb-2">
                 Scan Time: <span id="scanTimeDisplay"></span>
             </div>
             <div class="mb-3">
@@ -88,6 +91,7 @@
     const scanSection = document.getElementById('scanSection');
     const detailSection = document.getElementById('detailSection');
     const detailSequenceNoElement = document.getElementById('detailSequenceNo');
+    const detailProductionDateElement = document.getElementById('detailProductionDate');
     const scanTimeDisplayElement = document.getElementById('scanTimeDisplay');
     const detectTimeDisplayElement = document.getElementById('detectTimeDisplay');
     const timerDisplayElement = document.getElementById('timerDisplay');
@@ -122,6 +126,7 @@
             const parts = decodedText.split(';');
             let seqNo = parts[0]?.trim() || '';
             seqNo = seqNo.padStart(5, '0');
+            let productionDate = parts[1]?.trim() || '';
 
             sequenceInput.value = seqNo;
 
@@ -129,13 +134,13 @@
             html5QrcodeScanner.clear().catch(console.error);
             html5QrcodeScanner = null;
 
-            processSequence(seqNo);
+            processSequence(seqNo, productionDate);
         }
 
         html5QrcodeScanner.render(onScanSuccess);
     });
 
-    function processSequence(sequenceNo) {
+    function processSequence(sequenceNo, productionDate) {
         validationMessageDiv.style.display = 'none';
         loadingIndicator.style.display = 'block';
 
@@ -145,7 +150,10 @@
                 'Content-Type': 'application/json',
                 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
             },
-            body: JSON.stringify({ sequence_no: sequenceNo }),
+            body: JSON.stringify({ 
+                sequence_no: sequenceNo,
+                production_date: productionDate
+             }),
         })
         .then(response => response.json())
         .then(data => {
@@ -160,13 +168,14 @@
 
                 // Isi detail
                 detailSequenceNoElement.textContent = sequenceNo;
+                detailProductionDateElement.textContent = productionDate;
                 // Ambil waktu saat ini untuk Scan Time (karena waktu sebenarnya ditentukan di server)
                 const now = new Date().toLocaleString('id-ID', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
                 scanTimeDisplayElement.textContent = now; // Tampilkan waktu klien sebagai estimasi
                 detectTimeDisplayElement.textContent = '-'; // Default ke '-'
 
                 // Mulai timer 40 detik
-                startCountdown(sequenceNo);
+                startCountdown(sequenceNo, productionDate);
 
             } else {
                 console.error('Proses Oiler gagal:', data.message);
@@ -182,13 +191,13 @@
         });
     }
 
-    function startCountdown(sequenceNo) {
+    function startCountdown(sequenceNo, productionDate) {
         countdownTime = 40;
         timerDisplayElement.textContent = countdownTime;
 
         // Mulai interval polling setiap 2 detik
         pollInterval = setInterval(() => {
-            checkDetectTime(sequenceNo);
+            checkDetectTime(sequenceNo, productionDate);
         }, 2000);
 
         // Mulai countdown timer
@@ -200,14 +209,14 @@
                 clearInterval(countdownInterval);
                 clearInterval(pollInterval);
                 // Hapus data record
-                deleteRecord(sequenceNo);
+                deleteRecord(sequenceNo, productionDate);
             }
         }, 1000);
     }
 
-    function checkDetectTime(sequenceNo) {
+    function checkDetectTime(sequenceNo, productionDate) {
         // Panggil API untuk cek apakah Detect_Time_Record sudah terisi
-        fetch(`/iseki_oiler/public/api/check-detect-time/${sequenceNo}`, {
+        fetch(`/iseki_oiler/public/api/check-detect-time/${sequenceNo}/${productionDate}`, {
             method: 'GET',
             headers: {
                 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
@@ -233,9 +242,9 @@
         });
     }
 
-    function deleteRecord(sequenceNo) {
+    function deleteRecord(sequenceNo, productionDate) {
         // Panggil API untuk menghapus record berdasarkan Sequence_No_Record
-        fetch(`/iseki_oiler/public/api/delete-record/${sequenceNo}`, {
+        fetch(`/iseki_oiler/public/api/delete-record/${sequenceNo}/${productionDate}`, {
             method: 'DELETE', // Gunakan method DELETE
             headers: {
                 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
@@ -274,8 +283,10 @@
         if (pollInterval) clearInterval(pollInterval);
         // Hapus record terkait
         const currentSequenceNo = detailSequenceNoElement.textContent;
-        if (currentSequenceNo) {
-            deleteRecord(currentSequenceNo);
+        const currentProductionDate = detailProductionDateElement.textContent;
+
+        if (currentSequenceNo && currentProductionDate) {
+            deleteRecord(currentSequenceNo, currentProductionDate); // ← kirim keduanya
         }
     });
 
