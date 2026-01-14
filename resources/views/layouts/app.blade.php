@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Iseki Oiler</title>
+    <title>Oli Detection</title>
     <link href="{{ asset('assets/css/bootstrap.min.css') }}" rel="stylesheet">
     <!-- Tambahkan CSS DataTables jika digunakan -->
     <link rel="stylesheet" href="{{ asset('assets/css/dataTables.bootstrap5.min.css') }}">
@@ -21,7 +21,7 @@
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-pink">
         <div class="container mx-4">
-            <a class="navbar-brand" href="{{ route('home') }}">Iseki Oiler</a>
+            <a class="navbar-brand" href="{{ route('home') }}">Oli Detection</a>
             <div class="navbar-nav">
                 <a class="nav-link" href="{{ route('oiler.scan') }}">Scan</a>
                 <a class="nav-link" href="{{ route('oiler.list') }}">List</a>
