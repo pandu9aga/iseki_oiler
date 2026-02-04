@@ -1,59 +1,88 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Iseki Oiler - Production Line Oiling Station System
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+## Overview
 
-## About Laravel
+**Iseki Oiler** is a specialized station management system designed to track and validate the oiling process in a production line. It acts as an intermediary station that ensures correct process sequencing by integrating with the central **Podium** production planning system and hardware sensors (NodeMCU).
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+The system ensures that tractors are processed in the right order and that all preceding assembly steps are completed before the oiling process can begin.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Key Features
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+### 1. Sequential Scan & Validation
+*   **Sequence Scanning**: Interface for operators to scan tractor sequence numbers.
+*   **Cross-System Validation**: Integrates with the **Podium** database to:
+    *   Verify the existence of the production plan for a specific sequence.
+    *   Enforce production rules (checks if previous steps like assembly or parcom are completed).
+*   **Incomplete Process Prevention**: Prevents starting a new scan if a previous tractor hasn't triggered the oil detection sensor.
 
-## Learning Laravel
+### 2. Hardware Integration (NodeMCU)
+*   **Automated Detection**: Supports API calls from NodeMCU-based sensors.
+*   **Real-time Updates**: Automatically records `Detect_Time_Record` when the physical oiling process is confirmed by hardware.
+*   **Process Completion**: Once the oiling step is detected, the system updates the central Podium plan. If all defined rules for a model are met, it automatically marks the plan as `done`.
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+### 3. Monitoring & Reporting
+*   **Record Listing**: A dashboard powered by **Yajra DataTables** for browsing scan history.
+*   **Status Tracking**: View real-time scan times and detection status for every unit in the production line.
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+## Technology Stack
 
-## Laravel Sponsors
+### Backend
+*   **Framework**: [Laravel 12.x](https://laravel.com)
+*   **Language**: PHP ^8.2
+*   **Database**: SQLite (Local records) & MySQL/MariaDB (Podium integration)
+*   **Data Grids**: `yajra/laravel-datatables` ^12.0
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+### Frontend
+*   **Build Tool**: [Vite](https://vitejs.dev)
+*   **Styling**: [Tailwind CSS v4.0](https://tailwindcss.com)
+*   **HTTP Client**: Axios
 
-### Premium Partners
+## Installation & Setup
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+1.  **Clone the Repository**
+    ```bash
+    git clone <repository-url>
+    cd iseki_oiler
+    ```
 
-## Contributing
+2.  **Install PHP Dependencies**
+    ```bash
+    composer install
+    ```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+3.  **Install Node Dependencies**
+    ```bash
+    npm install
+    ```
 
-## Code of Conduct
+4.  **Environment Configuration**
+    *   Copy the example environment file:
+        ```bash
+        cp .env.example .env
+        ```
+    *   **CRITICAL**: Configure the `DB_CONNECTION_PODIUM` settings in `.env` to connect to the central Podium database.
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+5.  **Initialize Application**
+    ```bash
+    php artisan key:generate
+    php artisan migrate
+    ```
 
-## Security Vulnerabilities
+6.  **Build Frontend**
+    ```bash
+    npm run build
+    ```
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+7.  **Run Development Server**
+    ```bash
+    php artisan serve
+    ```
+
+## API Endpoints for Integration
+
+*   **`POST /scan`**: Used by the operator terminal to start a process.
+*   **`GET /api/nodemcu/status` (example logic)**: Endpoint called by NodeMCU to confirm oil detection.
 
 ## License
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+This project is proprietary.
