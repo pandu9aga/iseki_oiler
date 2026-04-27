@@ -17,6 +17,15 @@
         }
     </style>
     @yield('style')
+
+    <!-- Dynamic Favicon -->
+    <script src="/iseki_pro_app/js/dynamic-favicon.js"></script>
+    <script>document.addEventListener("DOMContentLoaded", function() { setDynamicFavicon("oil_barrel", "Oli Detection"); });</script>
+
+    <!-- Dynamic Favicon Assets -->
+    <link rel="stylesheet" href="/iseki_pro_app/css/icon.css">
+    <script src="/iseki_pro_app/js/dynamic-favicon.js"></script>
+    <script>document.addEventListener("DOMContentLoaded", function() { setDynamicFavicon("oil_barrel", "Oli Detection"); });</script>
 </head>
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-pink">
